@@ -6,6 +6,7 @@ import '../../services/auth_service.dart';
 import '../../models/event_model.dart';
 import '../../theme/app_theme.dart';
 import './create_event_screen.dart';
+import '../event/event_detail_screen.dart'; // 追加
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -158,7 +159,6 @@ class EventListPage extends StatelessWidget {
                 stream: FirebaseFirestore.instance
                     .collection('events')
                     .where('isPublic', isEqualTo: true)
-                // .orderBy('eventDate', descending: false) // この行を削除またはコメントアウト
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
@@ -303,9 +303,12 @@ class EventListPage extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: () {
-            // TODO: イベント詳細画面へ
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('${event.name}をタップしました')),
+            // EventDetailScreenに遷移
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => EventDetailScreen(eventId: event.id),
+              ),
             );
           },
           child: Column(
