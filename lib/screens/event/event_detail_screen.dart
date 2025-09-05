@@ -111,6 +111,12 @@ class _EventDetailScreenState extends State<EventDetailScreen>
 
       await batch.commit();
 
+      // システムメッセージを送信
+      await EventChatScreen.sendSystemMessage(
+        eventId: widget.eventId,
+        content: '${user.nickname}さんがイベントに参加しました',
+      );
+
       setState(() {
         _isJoined = true;
         if (_event != null) {
@@ -130,6 +136,90 @@ class _EventDetailScreenState extends State<EventDetailScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('参加に失敗しました: $e'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    }
+  }
+
+  Future<void> _leaveEvent() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final user = authService.currentUserModel;
+
+    if (user == null || _event == null) return;
+
+    // 確認ダイアログを表示
+    final shouldLeave = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('イベントから退出'),
+        content: const Text('本当にイベントから退出しますか？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              foregroundColor: AppTheme.errorColor,
+            ),
+            child: const Text('退出'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldLeave != true) return;
+
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+
+      // 参加者リストから削除
+      final participantRef = FirebaseFirestore.instance
+          .collection('events')
+          .doc(widget.eventId)
+          .collection('participants')
+          .doc(user.uid);
+
+      batch.delete(participantRef);
+
+      // 参加者数を更新
+      final eventRef = FirebaseFirestore.instance
+          .collection('events')
+          .doc(widget.eventId);
+
+      batch.update(eventRef, {
+        'participantCount': FieldValue.increment(-1),
+      });
+
+      await batch.commit();
+
+      // システムメッセージを送信
+      await EventChatScreen.sendSystemMessage(
+        eventId: widget.eventId,
+        content: '${user.nickname}さんがイベントから退出しました',
+      );
+
+      setState(() {
+        _isJoined = false;
+        if (_event != null) {
+          _event = _event!.copyWith(
+            participantCount: _event!.participantCount - 1,
+          );
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('イベントから退出しました'),
+          backgroundColor: AppTheme.successColor,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('退出に失敗しました: $e'),
           backgroundColor: AppTheme.errorColor,
         ),
       );
@@ -287,47 +377,65 @@ class _EventDetailScreenState extends State<EventDetailScreen>
                             ],
                           ),
                         ),
-                        if (!_isJoined)
-                          ElevatedButton(
-                            onPressed: _joinEvent,
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                                vertical: 12,
-                              ),
-                            ),
-                            child: const Text('参加する'),
-                          ),
-                        if (_isJoined)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.successColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: AppTheme.successColor),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.check_circle,
-                                  size: 16,
-                                  color: AppTheme.successColor,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '参加中',
-                                  style: TextStyle(
-                                    color: AppTheme.successColor,
-                                    fontWeight: FontWeight.w600,
+                        Column(
+                          children: [
+                            if (!_isJoined)
+                              ElevatedButton(
+                                onPressed: _joinEvent,
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 12,
                                   ),
                                 ),
-                              ],
-                            ),
-                          ),
+                                child: const Text('参加する'),
+                              ),
+                            if (_isJoined) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.successColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: AppTheme.successColor),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.check_circle,
+                                      size: 16,
+                                      color: AppTheme.successColor,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '参加中',
+                                      style: TextStyle(
+                                        color: AppTheme.successColor,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              OutlinedButton(
+                                onPressed: _leaveEvent,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppTheme.errorColor,
+                                  side: const BorderSide(color: AppTheme.errorColor),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                ),
+                                child: const Text('退出'),
+                              ),
+                            ],
+                          ],
+                        ),
                       ],
                     ),
 
