@@ -47,7 +47,30 @@ class _EventChatScreenState extends State<EventChatScreen> {
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return Center(
-                    child: Text('エラーが発生しました: ${snapshot.error}'),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          size: 64,
+                          color: AppTheme.textLight,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'エラーが発生しました',
+                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: () {
+                            setState(() {}); // 再読み込み
+                          },
+                          child: const Text('再読み込み'),
+                        ),
+                      ],
+                    ),
                   );
                 }
 
@@ -57,6 +80,7 @@ class _EventChatScreenState extends State<EventChatScreen> {
 
                 final messages = snapshot.data?.docs
                     .map((doc) => ChatMessageModel.fromFirestore(doc))
+                    .where((message) => !message.isDeleted) // 削除されたメッセージを除外
                     .toList() ??
                     [];
 
@@ -97,10 +121,8 @@ class _EventChatScreenState extends State<EventChatScreen> {
                   separatorBuilder: (context, index) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final message = messages[index];
-                    final isMe = Provider.of<AuthService>(context, listen: false)
-                        .currentUser
-                        ?.uid ==
-                        message.senderUid;
+                    final authService = Provider.of<AuthService>(context, listen: false);
+                    final isMe = authService.currentUser?.uid == message.senderUid;
 
                     return _buildMessageBubble(message, isMe);
                   },
@@ -212,76 +234,154 @@ class _EventChatScreenState extends State<EventChatScreen> {
 
         // メッセージバブル
         Flexible(
-          child: Column(
-            crossAxisAlignment: isMe
-                ? CrossAxisAlignment.end
-                : CrossAxisAlignment.start,
-            children: [
-              if (!isMe)
-                Padding(
-                  padding: const EdgeInsets.only(left: 12, bottom: 4),
+          child: GestureDetector(
+            onLongPress: () => _showMessageOptions(message, isMe),
+            child: Column(
+              crossAxisAlignment: isMe
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
+              children: [
+                if (!isMe)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12, bottom: 4),
+                    child: Text(
+                      message.senderNickname,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: message.type == MessageType.system
+                        ? AppTheme.textLight.withOpacity(0.1)
+                        : isMe
+                        ? AppTheme.primaryColor
+                        : AppTheme.surfaceColor,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(18),
+                      topRight: const Radius.circular(18),
+                      bottomLeft: isMe
+                          ? const Radius.circular(18)
+                          : const Radius.circular(4),
+                      bottomRight: isMe
+                          ? const Radius.circular(4)
+                          : const Radius.circular(18),
+                    ),
+                    boxShadow: message.type == MessageType.system
+                        ? []
+                        : [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
                   child: Text(
-                    message.senderNickname,
+                    message.content,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: message.type == MessageType.system
+                          ? AppTheme.textSecondary
+                          : isMe
+                          ? Colors.white
+                          : AppTheme.textPrimary,
+                      fontStyle: message.type == MessageType.system
+                          ? FontStyle.italic
+                          : FontStyle.normal,
+                    ),
+                  ),
+                ),
+
+                // タイムスタンプ
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    DateFormat('HH:mm').format(message.timestamp),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppTheme.textSecondary,
-                      fontWeight: FontWeight.w500,
+                      color: AppTheme.textLight,
+                      fontSize: 11,
                     ),
                   ),
                 ),
-
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: isMe
-                      ? AppTheme.primaryColor
-                      : AppTheme.surfaceColor,
-                  borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(18),
-                    topRight: const Radius.circular(18),
-                    bottomLeft: isMe
-                        ? const Radius.circular(18)
-                        : const Radius.circular(4),
-                    bottomRight: isMe
-                        ? const Radius.circular(4)
-                        : const Radius.circular(18),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Text(
-                  message.content,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: isMe ? Colors.white : AppTheme.textPrimary,
-                  ),
-                ),
-              ),
-
-              // タイムスタンプ
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  DateFormat('HH:mm').format(message.timestamp),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppTheme.textLight,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
 
         if (isMe) const SizedBox(width: 40),
       ],
     );
+  }
+
+  void _showMessageOptions(ChatMessageModel message, bool isMe) {
+    if (!isMe || message.type == MessageType.system) return;
+
+    final now = DateTime.now();
+    final timeDifference = now.difference(message.timestamp);
+    final canDelete = timeDifference.inMinutes <= 15;
+
+    if (!canDelete) return;
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.delete, color: AppTheme.errorColor),
+              title: const Text('メッセージを削除'),
+              onTap: () {
+                Navigator.pop(context);
+                _deleteMessage(message);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.cancel),
+              title: const Text('キャンセル'),
+              onTap: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteMessage(ChatMessageModel message) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('events')
+          .doc(widget.eventId)
+          .collection('messages')
+          .doc(message.id)
+          .update({'isDeleted': true});
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('メッセージを削除しました'),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('削除に失敗しました: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _sendMessage() async {
@@ -341,6 +441,34 @@ class _EventChatScreenState extends State<EventChatScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  // システムメッセージを送信するメソッド（イベント参加時に呼び出し）
+  static Future<void> sendSystemMessage({
+    required String eventId,
+    required String content,
+  }) async {
+    try {
+      final messageRef = FirebaseFirestore.instance
+          .collection('events')
+          .doc(eventId)
+          .collection('messages')
+          .doc();
+
+      final systemMessage = ChatMessageModel(
+        id: messageRef.id,
+        eventId: eventId,
+        senderUid: 'system',
+        senderNickname: 'システム',
+        content: content,
+        type: MessageType.system,
+        timestamp: DateTime.now(),
+      );
+
+      await messageRef.set(systemMessage.toFirestore());
+    } catch (e) {
+      print('システムメッセージの送信に失敗: $e');
     }
   }
 }
